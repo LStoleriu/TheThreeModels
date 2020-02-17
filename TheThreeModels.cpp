@@ -21,18 +21,20 @@ typedef complex<double> doublec;
 
 #define nstep 1000
 
-constexpr int numRuns = 10;
+constexpr int numRuns = 100000;
 
 #define LLG 1
 #undef LLG
 #define LLG_TIMING 1
 #undef LLG_TIMING
 #define SW 1
-//#undef SW
+#undef SW
 #define SW_TIMING 1
-#undef SW_TIMING
+//#undef SW_TIMING
 #define SW_APPROX 1
-//#undef SW_APPROX
+#undef SW_APPROX
+#define SW_APPROX_TIMING 1
+#undef SW_APPROX_TIMING
 
 constexpr int n_max_vec = 30;
 
@@ -555,7 +557,76 @@ int main()
 		}
 	}
 #endif
+#ifdef SW_APPROX_TIMING
+	{
+		DWORD starttime, elapsedtime;
+		starttime = timeGetTime();
+		for (int numMHLs = 0; numMHLs < numRuns; numMHLs++)
+		{
+			double ug_th = theta_h;
+			double ug_ph = phi_h;
+			double MHL_projection;
 
+			//initial conditions
+		//////////////////////////////////// SATURARTE!
+			for (i = 0; i < npart; i++)
+			{
+				Medium[i].theta_sol = H[0].theta;
+				Medium[i].phi_sol = H[0].phi;
+				y[2 * i + 0] = Medium[i].theta_sol;
+				y[2 * i + 1] = Medium[i].phi_sol;
+				y_old[2 * i + 0] = y[2 * i + 0];
+				y_old[2 * i + 1] = y[2 * i + 1];
+			}
+
+			Hext = H[0];
+			for (j = 0; j < npart; j++)
+				SW_approx(j, &y[2 * j + 0], Medium[j], Hext);
+
+			for (j = 0; j < npart; j++)
+			{
+				Medium[j].theta_sol = y[2 * j + 0];
+				Medium[j].phi_sol = y[2 * j + 1];
+				y_old[2 * j + 0] = y[2 * j + 0];
+				y_old[2 * j + 1] = y[2 * j + 1];
+			}
+			/////////////////////////////////////////////////
+
+			for (int h = 0; h < nstep; h++)
+			{
+				Hext = H[h];
+
+				for (j = 0; j < npart; j++)
+				{
+					y[2 * j + 0] = Medium[j].theta_sol;
+					y[2 * j + 1] = Medium[j].phi_sol;
+					y_old[2 * j + 0] = y[2 * j + 0];
+					y_old[2 * j + 1] = y[2 * j + 1];
+				}
+
+				for (j = 0; j < npart; j++)
+					SW_approx(j, &y[2 * j + 0], Medium[j], Hext);
+
+				Msys.Mx = 0.0; Msys.My = 0.0; Msys.Mz = 0.0;
+				for (j = 0; j < npart; j++)
+				{
+					Medium[j].theta_sol = y[2 * j + 0];
+					Medium[j].phi_sol = y[2 * j + 1];
+					Msys.Mx += Medium[j].volume * sin(y[2 * j + 0]) * cos(y[2 * j + 1]);
+					Msys.My += Medium[j].volume * sin(y[2 * j + 0]) * sin(y[2 * j + 1]);
+					Msys.Mz += Medium[j].volume * cos(y[2 * j + 0]);
+				}
+				Msys.Mx /= VolumTotal;
+				Msys.My /= VolumTotal;
+				Msys.Mz /= VolumTotal;
+
+				MHL_projection = (Msys.Mx * sin(Hext.theta) * cos(Hext.phi) + Msys.My * sin(Hext.theta) * sin(Hext.phi) + Msys.Mz * cos(Hext.theta));
+			}
+		}
+		elapsedtime = timeGetTime() - starttime;
+		printf("Time Elapsed %10d mSecs \n", (int)elapsedtime);
+	}
+#endif
 	return(0);
 }
 
